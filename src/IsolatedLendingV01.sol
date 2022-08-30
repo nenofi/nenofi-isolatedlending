@@ -3,6 +3,7 @@ pragma solidity >= 0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interface/IOracle.sol";
+import "forge-std/console.sol";
 
 contract IsolatedLendingV01{
 
@@ -19,9 +20,16 @@ contract IsolatedLendingV01{
 
     uint256 public exchangeRate;
 
-    constructor(address _collateral, address _asset){
+    constructor(address _collateral, address _asset, address _oracle){
         collateral = IERC20(_collateral);
         asset = IERC20(_asset);
+        oracle = IOracle(_oracle);
+    }
+
+    function addCollateral(address _to, uint256 _share) public {
+        userCollateralShare[_to] += userCollateralShare[_to] + _share;
+        uint256 oldTotalCollateralShare = totalCollateralShare;
+        totalCollateralShare += oldTotalCollateralShare + _share;
     }
     
 
