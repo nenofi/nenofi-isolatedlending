@@ -2,6 +2,7 @@
 pragma solidity >= 0.8.4;
 
 import "forge-std/Test.sol";
+
 import "../src/IsolatedLendingV01.sol";
 import "../src/test/MockERC20.sol";
 import "../src/interface/IOracle.sol";
@@ -22,6 +23,10 @@ contract IsolatedLendingV01Test is Test {
     function testAddCollateral(address _to, uint256 _share) public {
         isolatedLending.addCollateral(_to, _share);
         assertEq(isolatedLending.userCollateralShare(_to), _share);
+    }
+
+    function testAccrue() public{
+        isolatedLending.accrue();
     }
 
 }
