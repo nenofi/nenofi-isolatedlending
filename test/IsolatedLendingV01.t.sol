@@ -31,7 +31,7 @@ contract IsolatedLendingV01Test is Test {
         vm.startPrank(Alice);
         usdt.mint(1000e18);
         usdt.approve(address(isolatedLending), 1000e18);
-        isolatedLending.addCollateral(address(Alice), 1000e18);
+        isolatedLending.addCollateral(1000e18);
         vm.stopPrank();
         assertEq(isolatedLending.userCollateralAmount(Alice), 1000e18);
 
@@ -41,12 +41,28 @@ contract IsolatedLendingV01Test is Test {
         vm.startPrank(Bob);
         neIDR.mint(10000000e18);
         neIDR.approve(address(isolatedLending), 10000000e18);
-        isolatedLending.addAsset(address(Bob), 1000000e18);
+        isolatedLending.addAsset(1000000e18);
         vm.stopPrank();
-        console.log(isolatedLending.balanceOf(address(Bob)));
-        assertEq(isolatedLending.userCollateralAmount(Alice), 1000e18);
+        assertEq(isolatedLending.balanceOf(address(Bob)), 1000000e18);
     }
 
+    
+    function testBorrow() public {
+        vm.startPrank(Bob);
+        neIDR.mint(10000000e18);
+        neIDR.approve(address(isolatedLending), 10000000e18);
+        isolatedLending.addAsset(1000000e18);
+        vm.stopPrank();
+
+        vm.startPrank(Alice);
+        isolatedLending.borrow(1000000e18);
+        vm.stopPrank();
+
+        console.log(isolatedLending.totalBorrow()/1e18);
+
+
+        // assertEq(isolatedLending.balanceOf(address(Bob)), 1000000e18);
+    }
 
 
 }

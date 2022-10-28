@@ -121,9 +121,11 @@ contract IsolatedLendingV01 is ERC20{
 
     // Total amounts
     uint256 public totalCollateralAmount; // Total collateral supplied
-    Rebase public totalAsset; // total Asset available to borrow. elastic = BentoBox shares held by the KashiPair, base = Total fractions/percentage held by asset suppliers
+    uint256 public totalAsset;
+    uint256 public totalBorrow;
+    // Rebase public totalAsset; // total Asset available to borrow. elastic = BentoBox shares held by the KashiPair, base = Total fractions/percentage held by asset suppliers
     // totalAsset.elastic shouldnt be used
-    Rebase public totalBorrow; // elastic = Total token amount to be repayed by borrowers, base = Total parts of the debt held by borrowers
+    // Rebase public totalBorrow; // elastic = Total token amount to be repayed by borrowers, base = Total parts of the debt held by borrowers
 
     //user balances
     mapping(address => uint256) public userCollateralAmount;
@@ -131,6 +133,7 @@ contract IsolatedLendingV01 is ERC20{
     mapping(address => uint256) public userBorrowAmount;
 
     uint256 public exchangeRate;
+    uint256 public ibTokenRate;
 
     struct AccrueInfo {
         uint256 interestPerSecond;
@@ -169,100 +172,131 @@ contract IsolatedLendingV01 is ERC20{
 
 
 
-    constructor(address _collateral, address _asset, address _oracle)ERC20("USDT/NEIDR","USD/IDR"){
+    constructor(address _collateral, address _asset, address _oracle)ERC20("USDT/NEIDR","USDT/NEIDR ibNeIDR"){
         feeTo = 0xC69bf0B2F5862650aEB94024Fa7D7187c53c69Fd;
         collateral = IERC20(_collateral);
         asset = IERC20(_asset);
         oracle = IOracle(_oracle);
         accrueInfo.interestPerSecond = uint64(STARTING_INTEREST_PER_SECOND); // 1% APR, with 1e18 being 100%
+        ibTokenRate = 1e18;
     }
 
-    function accrue() public{
-        AccrueInfo memory _accrueInfo = accrueInfo;
-        // Number of seconds since accrue was called
-        uint256 elapsedTime = block.timestamp - _accrueInfo.lastAccrued;
-        if (elapsedTime == 0) {
-            return;
-        }
-        _accrueInfo.lastAccrued = block.timestamp;
+    // function accrue() public{
+    //     AccrueInfo memory _accrueInfo = accrueInfo;
+    //     // Number of seconds since accrue was called
+    //     uint256 elapsedTime = block.timestamp - _accrueInfo.lastAccrued;
+    //     if (elapsedTime == 0) {
+    //         return;
+    //     }
+    //     _accrueInfo.lastAccrued = block.timestamp;
 
-        Rebase memory _totalBorrow = totalBorrow;
+    //     Rebase memory _totalBorrow = totalBorrow;
 
-        if(_totalBorrow.base == 0){
-            if (_accrueInfo.interestPerSecond != STARTING_INTEREST_PER_SECOND) {
-                _accrueInfo.interestPerSecond = STARTING_INTEREST_PER_SECOND;
-            }
-            accrueInfo = _accrueInfo;
-            return;
-        }
+    //     if(_totalBorrow.base == 0){
+    //         if (_accrueInfo.interestPerSecond != STARTING_INTEREST_PER_SECOND) {
+    //             _accrueInfo.interestPerSecond = STARTING_INTEREST_PER_SECOND;
+    //         }
+    //         accrueInfo = _accrueInfo;
+    //         return;
+    //     }
 
-        uint256 extraAmount = 0;
-        uint256 feeFraction = 0;
-        Rebase memory _totalAsset = totalAsset;
+    //     uint256 extraAmount = 0;
+    //     uint256 feeFraction = 0;
+    //     Rebase memory _totalAsset = totalAsset;
 
-        // Accrue interest
-        extraAmount = _totalBorrow.elastic*_accrueInfo.interestPerSecond*elapsedTime / 1e18;
-        _totalBorrow.elastic = _totalBorrow.elastic + extraAmount;
-        uint256 fullAssetAmount = _totalAsset.toElastic(_totalAsset.elastic,false) + _totalBorrow.elastic;
+    //     // Accrue interest
+    //     extraAmount = _totalBorrow.elastic*_accrueInfo.interestPerSecond*elapsedTime / 1e18;
+    //     _totalBorrow.elastic = _totalBorrow.elastic + extraAmount;
+    //     uint256 fullAssetAmount = _totalAsset.toElastic(_totalAsset.elastic,false) + _totalBorrow.elastic;
 
-        uint256 feeAmount = extraAmount * 10000/1e5; // % of interest paid goes to fee
-        feeFraction = feeAmount*_totalAsset.base / fullAssetAmount;
-        _accrueInfo.feesEarnedFraction = _accrueInfo.feesEarnedFraction + feeFraction;
-        totalAsset.base = totalAsset.base + feeFraction;
-        totalBorrow = _totalBorrow;
+    //     uint256 feeAmount = extraAmount * 10000/1e5; // % of interest paid goes to fee
+    //     feeFraction = feeAmount*_totalAsset.base / fullAssetAmount;
+    //     _accrueInfo.feesEarnedFraction = _accrueInfo.feesEarnedFraction + feeFraction;
+    //     totalAsset.base = totalAsset.base + feeFraction;
+    //     totalBorrow = _totalBorrow;
 
-        //update interest rate
-        uint256 utilization = _totalBorrow.elastic*(1e18) / fullAssetAmount;
-        if (utilization < MINIMUM_TARGET_UTILIZATION) {
-            uint256 underFactor = (MINIMUM_TARGET_UTILIZATION-utilization)*FACTOR_PRECISION / MINIMUM_TARGET_UTILIZATION;
-            uint256 scale = INTEREST_ELASTICITY+(underFactor*underFactor*elapsedTime);
-            _accrueInfo.interestPerSecond = _accrueInfo.interestPerSecond*INTEREST_ELASTICITY / scale;
+    //     //update interest rate
+    //     uint256 utilization = _totalBorrow.elastic*(1e18) / fullAssetAmount;
+    //     if (utilization < MINIMUM_TARGET_UTILIZATION) {
+    //         uint256 underFactor = (MINIMUM_TARGET_UTILIZATION-utilization)*FACTOR_PRECISION / MINIMUM_TARGET_UTILIZATION;
+    //         uint256 scale = INTEREST_ELASTICITY+(underFactor*underFactor*elapsedTime);
+    //         _accrueInfo.interestPerSecond = _accrueInfo.interestPerSecond*INTEREST_ELASTICITY / scale;
 
-            if (_accrueInfo.interestPerSecond < MINIMUM_INTEREST_PER_SECOND) {
-                _accrueInfo.interestPerSecond = MINIMUM_INTEREST_PER_SECOND; // 0.25% APR minimum
-            }
-        } else if (utilization > MAXIMUM_TARGET_UTILIZATION) {
-            uint256 overFactor = (utilization-MAXIMUM_TARGET_UTILIZATION)*FACTOR_PRECISION / FULL_UTILIZATION_MINUS_MAX;
-            uint256 scale = INTEREST_ELASTICITY+(overFactor*overFactor*elapsedTime);
-            uint256 newInterestPerSecond = _accrueInfo.interestPerSecond*scale / INTEREST_ELASTICITY;
-            if (newInterestPerSecond > MAXIMUM_INTEREST_PER_SECOND) {
-                newInterestPerSecond = MAXIMUM_INTEREST_PER_SECOND; // 1000% APR maximum
-            }
-            _accrueInfo.interestPerSecond = uint64(newInterestPerSecond);
-        }
+    //         if (_accrueInfo.interestPerSecond < MINIMUM_INTEREST_PER_SECOND) {
+    //             _accrueInfo.interestPerSecond = MINIMUM_INTEREST_PER_SECOND; // 0.25% APR minimum
+    //         }
+    //     } else if (utilization > MAXIMUM_TARGET_UTILIZATION) {
+    //         uint256 overFactor = (utilization-MAXIMUM_TARGET_UTILIZATION)*FACTOR_PRECISION / FULL_UTILIZATION_MINUS_MAX;
+    //         uint256 scale = INTEREST_ELASTICITY+(overFactor*overFactor*elapsedTime);
+    //         uint256 newInterestPerSecond = _accrueInfo.interestPerSecond*scale / INTEREST_ELASTICITY;
+    //         if (newInterestPerSecond > MAXIMUM_INTEREST_PER_SECOND) {
+    //             newInterestPerSecond = MAXIMUM_INTEREST_PER_SECOND; // 1000% APR maximum
+    //         }
+    //         _accrueInfo.interestPerSecond = uint64(newInterestPerSecond);
+    //     }
 
-        accrueInfo = _accrueInfo;
-    }
+    //     accrueInfo = _accrueInfo;
+    // }
     
     // function _addTokens(IERC20 _token, uint256 _share){
     //     _token.transferFrom()
     // }
-
-
-    function addCollateral(address _to, uint256 _amount) public {
-        userCollateralAmount[_to] += userCollateralAmount[_to] + _amount;
-        totalCollateralAmount += totalCollateralAmount + _amount;
-        collateral.transferFrom(_to, address(this), _amount);
-    }
-
-    function _addAsset(address _to, uint256 _share) internal returns (uint256 fraction) {
-        Rebase memory _totalAsset = totalAsset;
-        // uint256 totalAssetShare = _totalAsset.elastic;
-        uint256 allShare = _totalAsset.elastic;
-        fraction = allShare == 0 ? _share : _share*_totalAsset.base / allShare;
-        if (_totalAsset.base+fraction < 1000) {
-            return 0;
-        }
-        totalAsset = _totalAsset.add(_share, fraction);
-        // balanceOf[_to] += balanceOf[_to] + fraction;
-        _mint(_to, fraction);
-        asset.transferFrom(_to, address(this), _share);
-    }
-
-    function addAsset(address _to, uint256 _amount)public returns (uint256 fraction){
-        accrue();
-        fraction = _addAsset(_to, _amount);
-    }
     
+    function _borrow(uint256 _amount) internal{
+        uint256 feeAmount = _amount*(BORROW_OPENING_FEE) / BORROW_OPENING_FEE_PRECISION; // A flat % fee is charged for any borrow
+        userBorrowAmount[msg.sender] += _amount + feeAmount;
+        totalBorrow = userBorrowAmount[msg.sender];
+        totalAsset -= _amount;
+        asset.transfer(msg.sender, _amount);
+    }
+
+    function borrow(uint256 _amount) public{
+        _borrow(_amount);
+    }
+
+    function addCollateral(uint256 _amount) public {
+        userCollateralAmount[msg.sender] += userCollateralAmount[msg.sender] + _amount;
+        totalCollateralAmount += totalCollateralAmount + _amount;
+        collateral.transferFrom(msg.sender, address(this), _amount);
+    }
+
+    // integrate ibTokenRate to mint the share
+    function _addAsset(uint256 _amount) internal returns (uint256 shares) {
+        uint256 _pool = balance();
+        asset.transferFrom(msg.sender, address(this), _amount);
+        totalAsset += _amount;
+        uint256 _after = balance();
+        _amount = _after - _pool;
+        shares = 0;
+        if(totalSupply() == 0){
+            shares = _amount;
+        } else{
+            shares = (_amount*totalSupply())/(_pool); //*auto revert if funds are all utilized and a user tried to deposit
+        }
+        _mint(msg.sender, shares);
+    }
+
+    // function _addAsset(address _to, uint256 _share) internal returns (uint256 fraction) {
+    //     Rebase memory _totalAsset = totalAsset;
+    //     // uint256 totalAssetShare = _totalAsset.elastic;
+    //     uint256 allShare = _totalAsset.elastic;
+    //     fraction = allShare == 0 ? _share : _share*_totalAsset.base / allShare;
+    //     if (_totalAsset.base+fraction < 1000) {
+    //         return 0;
+    //     }
+    //     totalAsset = _totalAsset.add(_share, fraction);
+    //     // balanceOf[_to] += balanceOf[_to] + fraction;
+    //     _mint(_to, fraction);
+    //     asset.transferFrom(_to, address(this), _share);
+    // }
+
+    function addAsset(uint256 _amount)public returns (uint256 shares){
+        // accrue();
+        shares = _addAsset(_amount);
+    }
+
+    function balance() public view returns(uint){
+        return IERC20(asset).balanceOf(address(this));
+    }
 
 }
