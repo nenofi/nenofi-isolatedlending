@@ -3,6 +3,8 @@ pragma solidity >= 0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/Extensions/ERC4626.sol";
+
 
 import "./interface/IOracle.sol";
 // import "@boringcrypto/contracts/libraries/BoringERC20.sol";
@@ -111,7 +113,6 @@ library RebaseLibrary {
 
 
 contract IsolatedLendingV01 is ERC20{
-    using RebaseLibrary for Rebase;
 
     address public feeTo;
 
